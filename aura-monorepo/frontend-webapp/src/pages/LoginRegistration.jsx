@@ -4,11 +4,12 @@ import {
   User, 
   Phone, 
   ArrowRight,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuthAndSafety } from '../context/AuthAndSafetyContext';
-
-// Sprint 3: Re-enable SA ID verification after adding its validator.
-// import { validateSouthAfricanId } from '../utils/saIdValidator.js';
+import { validateSouthAfricanId } from '../utils/saIdValidator.js';
 
 export default function LoginRegistration() {
   const navigate = useNavigate();
@@ -17,16 +18,13 @@ export default function LoginRegistration() {
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
+    idNumber: '',
   });
 
-  /* Sprint 3: Re-enable SA ID validation with the completed validator.
   const idValidation = useMemo(() => {
-    if (!formData.idNumber) {
-      return { isValid: false, error: null, details: null };
-    }
     return validateSouthAfricanId(formData.idNumber);
   }, [formData.idNumber]);
-  */
+  const [touched, setTouched] = useState({});
 
   // Phone number basic validation (SA format: 10 digits starting with 0, or with +27)
   const isPhoneValid = useMemo(() => {
@@ -36,26 +34,20 @@ export default function LoginRegistration() {
 
   const isNameValid = formData.fullName.trim().length >= 3;
 
-  // ID verification is deferred; Sprint 1 requires a valid name and phone number.
-  const isFormValid = isNameValid && isPhoneValid;
+  const isFormValid = isNameValid && isPhoneValid && idValidation.isValid;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  /* Sprint 3: Restore the SA ID demo helper alongside ID verification.
-  const handleAutoFillDemoId = () => {
-    setFormData({
-      fullName: 'Naledi Dlamini',
-      idNumber: '9201015000081', // Validated SA ID format & Luhn checksum
-      phoneNumber: '0821234567',
-    });
+  const handleBlur = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
   };
-  */
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setTouched({ fullName: true, phoneNumber: true, idNumber: true });
     if (!isFormValid) return;
     handleRegistrationComplete();
   };
@@ -65,6 +57,10 @@ export default function LoginRegistration() {
       id: `usr_${Date.now()}`,
       fullName: formData.fullName.trim(),
       phoneNumber: formData.phoneNumber.trim(),
+      idNumber: formData.idNumber,
+      dob: idValidation.details.dob,
+      gender: idValidation.details.gender,
+      citizen: idValidation.details.citizen,
       isVerified: false,
     };
     if (typeof setUser === 'function') {
@@ -106,30 +102,26 @@ export default function LoginRegistration() {
           </div>
         </div>
 
-        {/* Sprint 3: South African ID field and validation are deferred.
         <div>
-          <div className="flex justify-between items-center mb-1">
-            <label className="text-xs font-medium text-zinc-300">
+          <div className="mb-1">
+            <label htmlFor="id-number" className="block text-xs font-medium text-zinc-300">
               South African ID Number
             </label>
-            <button
-              type="button"
-              onClick={handleAutoFillDemoId}
-              className="text-[10px] text-rose-400 hover:text-rose-300 font-mono cursor-pointer"
-            >
-              Fill Demo ID
-            </button>
           </div>
           <div className="relative">
             <CreditCard className="w-4 h-4 absolute left-3.5 top-3.5 text-zinc-500" />
             <input
+              id="id-number"
               type="text"
               name="idNumber"
+              inputMode="numeric"
               maxLength={13}
               value={formData.idNumber}
               onChange={handleChange}
               onBlur={() => handleBlur('idNumber')}
-              placeholder="13-Digit SA ID (e.g. 9201015000081)"
+              placeholder="Enter your 13-digit ID number"
+              aria-invalid={touched.idNumber && !idValidation.isValid}
+              aria-describedby="id-number-feedback"
               className={`w-full pl-10 pr-10 py-3 bg-zinc-900/90 border rounded-2xl text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition ${
                 touched.idNumber && formData.idNumber
                   ? idValidation.isValid
@@ -150,22 +142,24 @@ export default function LoginRegistration() {
             )}
           </div>
 
-          Validation Feedback & Extracted DOB
-          {touched.idNumber && formData.idNumber && (
-            <div className="mt-1">
-              {idValidation.isValid ? (
+          <div id="id-number-feedback" className="mt-1" aria-live="polite">
+            {touched.idNumber ? (
+              idValidation.isValid ? (
                 <div className="text-[10px] text-emerald-400 font-mono flex items-center space-x-1">
-                  <span>Valid SA ID &bull; DOB: {idValidation.details?.dob} ({idValidation.details?.gender}, {idValidation.details?.citizen ? 'Citizen' : 'Perm Resident'})</span>
+                  <span>Valid ID format &bull; DOB: {idValidation.details.dob} ({idValidation.details.gender}, {idValidation.details.citizen ? 'Citizen' : 'Permanent Resident'})</span>
                 </div>
               ) : (
                 <p className="text-[10px] text-rose-400 font-mono">
-                  {idValidation.error || 'Invalid 13-digit SA ID number checksum'}
+                  {idValidation.error}
                 </p>
-              )}
-            </div>
-          )}
+              )
+            ) : (
+              <p className="text-[10px] text-zinc-500 font-mono">
+                Enter a valid 13-digit South African ID number.
+              </p>
+            )}
+          </div>
         </div>
-        */}
 
         {/* Phone Number */}
         <div>
@@ -201,7 +195,7 @@ export default function LoginRegistration() {
         </button>
 
         <p className="text-[10px] text-zinc-500 text-center font-mono">
-          ID verification is deferred to a later sprint.
+          Your ID number is checked locally for format and checksum; this does not verify your identity with an official source.
         </p>
       </form>
 

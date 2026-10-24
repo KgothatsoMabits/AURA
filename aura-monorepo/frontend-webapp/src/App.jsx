@@ -13,9 +13,9 @@ import SafetyDrawer from './components/SafetyDrawer.jsx';
 // import ActiveTracker from './pages/official/ActiveTracker.jsx';
 // import OfficialHome from './pages/official/OfficialHome.jsx';
 import Profile from './pages/official/Profile.jsx';
-// import HomeAddresses from './pages/official/HomeAddresses.jsx';
-// import EmergencyContacts from './pages/official/EmergencyContacts.jsx';
-// import SafetySettings from './pages/official/SafetySettings.jsx';
+import HomeAddresses from './pages/official/HomeAddresses.jsx';
+import EmergencyContacts from './pages/official/EmergencyContacts.jsx';
+import SafetySettings from './pages/official/SafetySettings.jsx';
 // import StealthDashboard from './pages/stealth/StealthDashboard.jsx';
 // import PlannerDashboard from './pages/stealth/PlannerDashboard.jsx';
 // import DiscreetJournal from './pages/stealth/DiscreetJournal.jsx';
@@ -208,7 +208,6 @@ function AppContentRoutes() {
               </AnimatedPageWrapper>
             }
           />
-          {/* Sprint 3: Re-enable profile sub-pages after implementation.
           <Route
             path="/profile/addresses"
             element={
@@ -225,7 +224,6 @@ function AppContentRoutes() {
               </AnimatedPageWrapper>
             }
           />
-          */}
           <Route
             path="/profile/settings"
             element={

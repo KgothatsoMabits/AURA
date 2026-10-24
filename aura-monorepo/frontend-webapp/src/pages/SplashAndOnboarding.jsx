@@ -278,12 +278,7 @@ export function OnboardingCarousel({ onComplete }) {
 
 export default function SplashAndOnboardingFlow({ onFinished }) {
   const [isBooting, setIsBooting] = useState(true);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('hasSeenOnboarding') === 'true';
-    }
-    return false;
-  });
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
 
   const handleSplashDone = () => {
     setIsBooting(false);

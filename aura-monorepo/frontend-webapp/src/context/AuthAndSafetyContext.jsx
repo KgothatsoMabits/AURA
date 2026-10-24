@@ -40,22 +40,19 @@ export function AuthAndSafetyProvider({ children }) {
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('aura_user');
-        if (stored) return JSON.parse(stored);
+        if (stored) {
+          const storedUser = JSON.parse(stored);
+          if (storedUser?.idNumber) {
+            delete storedUser.idNumber;
+            localStorage.setItem('aura_user', JSON.stringify(storedUser));
+          }
+          return storedUser;
+        }
       } catch (e) {
         // ignore
       }
     }
-    // Default verified citizen profile if authenticated
-    return {
-      id: 'usr_za_82910',
-      fullName: 'Kgothatso Mabitsela',
-      phoneNumber: '+27 82 123 4567',
-      idNumber: '9201015000081',
-      isVerified: true,
-      citizenStatus: 'Verified Citizen',
-      gender: 'Female',
-      dob: '1992-01-01',
-    };
+    return null;
   });
 
   const [isUserLoading, setIsUserLoading] = useState(false);
@@ -66,7 +63,9 @@ export function AuthAndSafetyProvider({ children }) {
       if (typeof window !== 'undefined') {
         try {
           if (next) {
-            localStorage.setItem('aura_user', JSON.stringify(next));
+            const persistedUser = { ...next };
+            delete persistedUser.idNumber;
+            localStorage.setItem('aura_user', JSON.stringify(persistedUser));
           } else {
             localStorage.removeItem('aura_user');
           }
@@ -81,7 +80,9 @@ export function AuthAndSafetyProvider({ children }) {
       const next = prev ? { ...prev, ...partial } : partial;
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem('aura_user', JSON.stringify(next));
+          const persistedUser = { ...next };
+          delete persistedUser.idNumber;
+          localStorage.setItem('aura_user', JSON.stringify(persistedUser));
         } catch (e) {}
       }
       return next;
@@ -143,12 +144,7 @@ export function AuthAndSafetyProvider({ children }) {
     return true;
   });
   const [isBooting, setIsBooting] = useState(true);
-  const [hasSeenOnboarding, setHasSeenOnboardingState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('hasSeenOnboarding') === 'true';
-    }
-    return false;
-  });
+  const [hasSeenOnboarding, setHasSeenOnboardingState] = useState(false);
 
   const setHasSeenOnboarding = useCallback((val) => {
     setHasSeenOnboardingState((prev) => {
