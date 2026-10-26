@@ -188,6 +188,28 @@ app.post('/api/v1/auth/resend-otp', authLimit, validateBody(z.object({ phoneNumb
   return res.status(202).json(neutralOtpReply);
 }));
 
+// Optional judge-only access to explicitly allowlisted, pre-seeded demo accounts.
+// Disabled unless both server-side flags are configured; normal OTP auth is untouched.
+const demoLoginSchema = z.object({ role: z.enum(["citizen", "responder"]), accessKey: z.string().min(1).max(256) }).strip();
+app.post("/api/v1/auth/demo-login", authLimit, validateBody(demoLoginSchema), asyncHandler(async (req, res) => {
+  const enabled = process.env.DEMO_AUTH_ENABLED === "true";
+  const configuredKey = process.env.DEMO_ACCESS_KEY || "";
+  const suppliedKey = String(req.body.accessKey || "");
+  const allowedPhones = (process.env.DEMO_ACCOUNT_PHONES || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (!enabled || configuredKey.length < 24 || !allowedPhones.length || !safeEqual(suppliedKey, configuredKey)) {
+    throw new HttpError(404, "Demo access is unavailable");
+  }
+  const expectedRole = req.body.role;
+  const result = await db.query(
+    "SELECT id, full_name, role, stealth_enabled, token_version, phone_e164, phone_verified_at FROM users WHERE phone_e164 = ANY($1::text[]) AND role = $2 AND phone_verified_at IS NOT NULL ORDER BY phone_e164 LIMIT 1",
+    [allowedPhones, expectedRole],
+  );
+  const user = result.rows[0];
+  if (!user) throw new HttpError(401, "Demo account is not provisioned for this role");
+  await db.query("INSERT INTO audit_log(action,details) VALUES('demo_login',jsonb_build_object('role',$1::text))", [user.role]);
+  res.json({ success: true, token: signToken(user), user: { id: user.id, fullName: user.full_name, role: user.role, stealthEnabled: user.stealth_enabled } });
+}));
+
 app.post('/api/v1/auth/login/request-otp', authLimit, validateBody(z.object({ phoneNumber: z.string().min(9).max(16) }).strip()), asyncHandler(async (req, res) => {
   const phone = toE164(req.body.phoneNumber);
   if (phone) {

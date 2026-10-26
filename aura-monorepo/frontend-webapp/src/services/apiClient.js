@@ -130,6 +130,7 @@ export const apiClient = {
     return this.post('/auth/verify-otp', payload);
   },
   loginRequestOtp(payload) { return this.post('/auth/login/request-otp', payload); },
+  demoLogin(payload) { return this.post('/auth/demo-login', payload); },
   loginVerifyOtp(payload) { return this.post('/auth/login/verify-otp', payload); },
   resendOtp(payload) { return this.post('/auth/resend-otp', payload); },
 

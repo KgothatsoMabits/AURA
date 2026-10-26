@@ -35,6 +35,10 @@ export default function LoginRegistration() {
   const [awaitingOtp, setAwaitingOtp] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showDemoLogin, setShowDemoLogin] = useState(false);
+  const [demoRole, setDemoRole] = useState('citizen');
+  const [demoAccessKey, setDemoAccessKey] = useState('');
+  const [demoLoginEnabled] = useState(import.meta.env.VITE_DEMO_LOGIN_ENABLED === 'true');
   const [touched, setTouched] = useState({
     fullName: false,
     idNumber: false,
@@ -94,6 +98,23 @@ export default function LoginRegistration() {
       setShowStealthModal(true);
     } catch (error) {
       setErrorMessage(error?.message || 'The code could not be verified.');
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setErrorMessage('');
+    try {
+      const result = await apiClient.demoLogin({ role: demoRole, accessKey: demoAccessKey });
+      await setSecret('aura_auth_token', result.token);
+      setUser({ ...result.user, isVerified: true, citizenStatus: 'Demo account' });
+      setIsAuthenticated(true);
+      if (result.user.role === 'responder') {
+        navigate('/responder');
+      } else {
+        setShowStealthModal(true);
+      }
+    } catch (error) {
+      setErrorMessage(error?.message || 'Demo login is unavailable. Check the access key and deployment configuration.');
     }
   };
 
@@ -238,6 +259,27 @@ export default function LoginRegistration() {
           {isLogin ? 'If this number belongs to a verified account, a code will be sent.' : 'Strict verification required to prevent false emergency hoaxes.'}
         </p>
       </form>
+
+      {demoLoginEnabled && (
+        <section className="max-w-sm w-full mx-auto mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <button type="button" onClick={() => setShowDemoLogin((value) => !value)} className="w-full text-left text-xs font-semibold text-zinc-300 hover:text-white">
+            {showDemoLogin ? '− Hide judge demo access' : '+ Judge demo access'}
+          </button>
+          {showDemoLogin && (
+            <div className="mt-3 space-y-3">
+              <p className="text-[10px] text-zinc-500">Use the access key supplied by the event organizer. Demo access is restricted to provisioned test accounts.</p>
+              <label className="block text-xs text-zinc-300">Demo account role</label>
+              <select value={demoRole} onChange={(event) => setDemoRole(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-white">
+                <option value="citizen">Citizen</option>
+                <option value="responder">Responder</option>
+              </select>
+              <label className="block text-xs text-zinc-300">Judge access key</label>
+              <input type="password" autoComplete="current-password" value={demoAccessKey} onChange={(event) => setDemoAccessKey(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-white" placeholder="Enter event access key" />
+              <button type="button" disabled={!demoAccessKey.trim()} onClick={handleDemoLogin} className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">CONTINUE AS DEMO USER</button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Discretion / Stealth Choice Modal */}
       {showStealthModal && (
