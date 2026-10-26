@@ -1,45 +1,57 @@
-
 /**
- * AURA e-SAPS — Vendel SMS transport.
+ * AURA e-SAPS — SMSPortal SMS transport (REST API, native fetch).
  *
  * Requirements:
- *   Node.js 18+
- *   npm install vendel-sdk
+ *   Node.js 18+ (global fetch). No extra npm packages needed.
+ *
+ * Environment variables:
+ *   SMSPORTAL_CLIENT_ID   (required)
+ *   SMSPORTAL_API_SECRET  (required)
+ *   SMSPORTAL_BASE_URL    (optional, default https://rest.smsportal.com)
+ *   SMSPORTAL_TEST_MODE   (optional, "true" = API accepts but does not send/charge)
+ *   SMSPORTAL_TIMEOUT_MS  (optional, default 15000)
  *
  * Security:
- *   - Never log message bodies, phone numbers, OTPs, or API keys.
+ *   - Never log message bodies, phone numbers, OTPs, or API credentials.
  *   - A successful API response means accepted, not necessarily delivered.
  */
 
-import { VendelClient, VendelAPIError, VendelQuotaError } from "vendel-sdk";
+const DEFAULT_BASE_URL = "https://rest.smsportal.com";
+const DEFAULT_TIMEOUT_MS = 15000;
 
-const VENDEL_API_KEY = process.env.VENDEL_API_KEY;
-const VENDEL_BASE_URL =
-  process.env.VENDEL_BASE_URL || "https://app.vendel.cc";
+function getConfig() {
+  const clientId = process.env.SMSPORTAL_CLIENT_ID;
+  const apiSecret = process.env.SMSPORTAL_API_SECRET;
 
-let vendelClient;
-
-function getVendelClient() {
-  if (!VENDEL_API_KEY) {
-    const error = new Error("Vendel API key is not configured");
+  if (!clientId || !apiSecret) {
+    const error = new Error("SMSPortal credentials are not configured");
     error.kind = "provider_not_configured";
     throw error;
   }
 
-  if (!VENDEL_BASE_URL.startsWith("https://")) {
-    const error = new Error("Vendel must use HTTPS");
+  const baseUrl = (process.env.SMSPORTAL_BASE_URL || DEFAULT_BASE_URL).replace(
+    /\/+$/,
+    ""
+  );
+
+  if (!baseUrl.startsWith("https://")) {
+    const error = new Error("SMSPortal must use HTTPS");
     error.kind = "invalid_provider_configuration";
     throw error;
   }
 
-  if (!vendelClient) {
-    vendelClient = new VendelClient({
-      baseUrl: VENDEL_BASE_URL,
-      apiKey: VENDEL_API_KEY,
-    });
-  }
+  const timeoutMs = Number.parseInt(process.env.SMSPORTAL_TIMEOUT_MS, 10);
 
-  return vendelClient;
+  return {
+    baseUrl,
+    authHeader:
+      "Basic " + Buffer.from(`${clientId}:${apiSecret}`).toString("base64"),
+    testMode: String(process.env.SMSPORTAL_TEST_MODE).toLowerCase() === "true",
+    timeoutMs:
+      Number.isInteger(timeoutMs) && timeoutMs > 0
+        ? timeoutMs
+        : DEFAULT_TIMEOUT_MS,
+  };
 }
 
 function validatePhoneNumber(phoneNumber) {
@@ -56,45 +68,79 @@ function validatePhoneNumber(phoneNumber) {
   }
 }
 
-function normalizeResponse(response) {
-  return {
-    success: true,
-    provider: "vendel",
-    status: response?.status ?? "accepted",
-    batchId: response?.batch_id ?? null,
-    messageIds: response?.message_ids ?? [],
-  };
+function toProviderDestination(phoneNumber) {
+  // SMSPortal expects international numbers without the leading "+".
+  return phoneNumber.slice(1);
 }
 
-function logProviderError(error) {
-  const status =
-    error instanceof VendelAPIError
-      ? error.statusCode
-      : Number.isInteger(error?.statusCode)
-        ? error.statusCode
-        : null;
+function kindFromStatus(status) {
+  if (status === 401 || status === 403) return "provider_authentication_failed";
+  if (status === 402) return "quota_exceeded";
+  if (status === 429) return "provider_rate_limited";
+  if (status !== null) return "provider_error";
+  return "provider_request_failed";
+}
 
-  const kind =
-    error instanceof VendelQuotaError
-      ? "quota_exceeded"
-      : status === 401 || status === 403
-        ? "provider_authentication_failed"
-        : status === 429
-          ? "provider_rate_limited"
-          : status !== null
-            ? "provider_error"
-            : "provider_request_failed";
+function throwProviderError(status, kindOverride) {
+  const kind = kindOverride || kindFromStatus(status);
 
   // Deliberately omit the raw error, message, recipient and credentials.
-  console.warn(
-    "[VENDEL SMS FAILURE]",
-    JSON.stringify({ status, kind })
-  );
+  console.warn("[SMSPORTAL SMS FAILURE]", JSON.stringify({ status, kind }));
 
-  const safeError = new Error("Vendel SMS delivery request failed");
+  const safeError = new Error("SMSPortal SMS delivery request failed");
   safeError.kind = kind;
   safeError.status = status;
   throw safeError;
+}
+
+async function request(path, { method = "GET", body } = {}) {
+  const { baseUrl, authHeader, timeoutMs } = getConfig();
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch {
+    // Network failure or timeout. Never log the underlying error.
+    throwProviderError(null);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    throwProviderError(response.status);
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeResponse(data) {
+  const errors = Array.isArray(data?.errors) ? data.errors : [];
+
+  return {
+    success: true,
+    provider: "smsportal",
+    status: "accepted",
+    eventId: data?.eventId ?? null,
+    costBundles: data?.costBundles ?? null,
+    remainingBalance: data?.remainingBalance ?? null,
+    errorCount: errors.length,
+  };
 }
 
 async function sendMessage(phoneNumber, message) {
@@ -104,56 +150,41 @@ async function sendMessage(phoneNumber, message) {
     throw new Error("SMS message must not be empty");
   }
 
-  try {
-    const response = await getVendelClient().sendSms(
-      [phoneNumber],
-      message
-    );
+  const { testMode } = getConfig();
 
-    console.info(
-      "[VENDEL SMS ACCEPTED]",
-      JSON.stringify({
-        provider: "vendel",
-        status: response?.status ?? "accepted",
-        messageCount: response?.message_ids?.length ?? 0,
-      })
-    );
+  const payload = {
+    messages: [
+      {
+        content: message,
+        destination: toProviderDestination(phoneNumber),
+      },
+    ],
+  };
 
-    return normalizeResponse(response);
-  } catch (error) {
-    logProviderError(error);
-  }
-}
-
-async function sendTemplate(phoneNumber, templateId, variables) {
-  validatePhoneNumber(phoneNumber);
-
-  if (typeof templateId !== "string" || !templateId.trim()) {
-    const error = new Error("Vendel template ID is not configured");
-    error.kind = "template_not_configured";
-    throw error;
+  if (testMode) {
+    payload.sendOptions = { testMode: true };
   }
 
-  try {
-    const response = await getVendelClient().sendSmsTemplate(
-      [phoneNumber],
-      templateId,
-      { variables }
-    );
+  const data = await request("/bulkmessages", {
+    method: "POST",
+    body: payload,
+  });
 
-    console.info(
-      "[VENDEL TEMPLATE ACCEPTED]",
-      JSON.stringify({
-        provider: "vendel",
-        status: response?.status ?? "accepted",
-        messageCount: response?.message_ids?.length ?? 0,
-      })
-    );
-
-    return normalizeResponse(response);
-  } catch (error) {
-    logProviderError(error);
+  // SMSPortal can return HTTP 200 with per-message errors.
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    throwProviderError(200, "provider_rejected_message");
   }
+
+  console.info(
+    "[SMSPORTAL SMS ACCEPTED]",
+    JSON.stringify({
+      provider: "smsportal",
+      eventId: data?.eventId ?? null,
+      testMode,
+    })
+  );
+
+  return normalizeResponse(data);
 }
 
 export const smsService = {
@@ -163,15 +194,6 @@ export const smsService = {
       !/^\d{4,10}$/.test(String(code))
     ) {
       throw new Error("OTP must contain between 4 and 10 digits");
-    }
-
-    const templateId = process.env.VENDEL_OTP_TEMPLATE_ID;
-
-    if (templateId) {
-      return sendTemplate(phoneNumber, templateId, {
-        code: String(code),
-        expiry: "10 minutes",
-      });
     }
 
     const message =
@@ -205,18 +227,6 @@ export const smsService = {
         ? String(incidentId)
         : "Unavailable";
 
-    const templateId = process.env.VENDEL_ALERT_TEMPLATE_ID;
-
-    if (templateId) {
-      return sendTemplate(contactPhone, templateId, {
-        contactName: String(contactName || "Emergency contact"),
-        citizenName: String(citizenName || "A citizen"),
-        location,
-        incidentId: reference,
-        emergencyNumber: "10111",
-      });
-    }
-
     const message =
       `[AURA EMERGENCY ALERT] ${citizenName || "A citizen"} ` +
       "triggered a verified emergency distress signal. " +
@@ -227,36 +237,10 @@ export const smsService = {
     return sendMessage(contactPhone, message);
   },
 
-  async getMessageStatus(messageId) {
-    if (typeof messageId !== "string" || !messageId.trim()) {
-      throw new Error("A message ID is required");
-    }
-
-    try {
-      return await getVendelClient().getMessageStatus(messageId);
-    } catch (error) {
-      logProviderError(error);
-    }
-  },
-
-  async getBatchStatus(batchId) {
-    if (typeof batchId !== "string" || !batchId.trim()) {
-      throw new Error("A batch ID is required");
-    }
-
-    try {
-      return await getVendelClient().getBatchStatus(batchId);
-    } catch (error) {
-      logProviderError(error);
-    }
-  },
-
+  /** Returns the remaining account balance (credits). */
   async getQuota() {
-    try {
-      return await getVendelClient().getQuota();
-    } catch (error) {
-      logProviderError(error);
-    }
+    const data = await request("/balance");
+    return { provider: "smsportal", balance: data?.balance ?? null };
   },
 };
 

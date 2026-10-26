@@ -1,4 +1,3 @@
-
 import { env } from "../config/env.js";
 import smsService from "./smsService.js";
 
@@ -21,7 +20,7 @@ export async function sendOtp(phone, code) {
     return { success: true, provider: "console" };
   }
 
-  if (env.SMS_PROVIDER === "vendel") {
+  if (env.SMS_PROVIDER === "smsportal") {
     return smsService.sendOtp(phone, code);
   }
 
@@ -34,7 +33,7 @@ export async function sendContactSms(
   latitude,
   longitude
 ) {
-    if (env.SMS_PROVIDER === "console") {
+  if (env.SMS_PROVIDER === "console") {
     assertConsoleAllowed("SMS");
     if (env.NODE_ENV === "development") {
       console.info(
@@ -45,7 +44,7 @@ export async function sendContactSms(
     return { success: true, provider: "console" };
   }
 
-  if (env.SMS_PROVIDER === "vendel") {
+  if (env.SMS_PROVIDER === "smsportal") {
     return smsService.notifyContact(
       phone,
       "Emergency contact",

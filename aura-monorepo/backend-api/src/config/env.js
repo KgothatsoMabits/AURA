@@ -15,7 +15,7 @@ const schema = z.object({
   ALLOWED_ORIGINS: z
     .string()
     .default("http://localhost:3000,capacitor://localhost,https://localhost"),
-  SMS_PROVIDER: z.enum(["console", "twilio","vendel"]).default("console"),
+  SMS_PROVIDER: z.enum(["console", "twilio","vendel","smsportal"]).default("console"),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
