@@ -1,17 +1,18 @@
 # Render Blueprint for Project Aura.
 # Uses the existing Supabase PostgreSQL database; no Render database is created.
 # Set DATABASE_URL to your Supabase connection string in the Render dashboard.
-# If Render assigns different service URLs, update VITE_API_URL and ALLOWED_ORIGINS.
+# Keep VITE_API_URL aligned with the actual deployed backend URL.
+
 services:
   - type: web
     name: aura-api
     runtime: node
     region: frankfurt
     plan: free
-    rootDir: backend-api
+    rootDir: aura-monorepo/backend-api
     buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /api/v1/health
+    healthCheckPath: /api/v1/live
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -30,6 +31,12 @@ services:
         generateValue: true
       - key: OTP_PEPPER
         generateValue: true
+      - key: DEMO_AUTH_ENABLED
+        value: "true"
+      - key: DEMO_ACCESS_KEY
+        sync: false
+      - key: DEMO_ACCOUNT_PHONES
+        sync: false
       - key: ALLOWED_ORIGINS
         value: https://aura-citizen-web.onrender.com,https://aura-responder-console.onrender.com,https://localhost,capacitor://localhost
       - key: SMS_PROVIDER
@@ -62,12 +69,13 @@ services:
   - type: web
     name: aura-citizen-web
     runtime: static
+    rootDir: aura-monorepo
     buildCommand: npm ci --prefix frontend-webapp && npm --prefix frontend-webapp run build
     staticPublishPath: ./dist
     autoDeploy: true
     envVars:
       - key: VITE_API_URL
-        value: https://aura-api.onrender.com/api/v1
+        value: https://aura-api-ykdg.onrender.com/api/v1
       - key: VITE_TILE_URL
         value: https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
     routes:
@@ -78,12 +86,15 @@ services:
   - type: web
     name: aura-responder-console
     runtime: static
+    rootDir: aura-monorepo
     buildCommand: npm ci --prefix responder-console && npm --prefix responder-console run build
     staticPublishPath: ./responder-console/dist
     autoDeploy: true
     envVars:
       - key: VITE_API_URL
-        value: https://aura-api.onrender.com/api/v1
+        value: https://aura-api-ykdg.onrender.com/api/v1
+      - key: VITE_DEMO_LOGIN_ENABLED
+        value: "true"
       - key: VITE_TILE_URL
         value: https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
     routes:

@@ -1,21 +1,26 @@
 import pg from "pg";
 import { env } from "./env.js";
 const { Pool } = pg;
-const connectionString = new URL(env.DATABASE_URL);
+
+const url = new URL(env.DATABASE_URL);
+const mode = url.searchParams.get("sslmode");
 if (
   env.NODE_ENV === "production" &&
-  connectionString.searchParams.get("sslmode") !== "require" &&
-  connectionString.searchParams.get("sslmode") !== "verify-full" &&
+  mode !== "require" &&
+  mode !== "verify-full" &&
   env.DATABASE_SSL !== true
 )
   throw new Error("DATABASE_URL must require TLS in production");
+
+const useTls = env.DATABASE_SSL === true || ["require", "verify-full"].includes(mode);
+url.searchParams.delete("sslmode"); // stop pg from overriding the ssl option below
+
 const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  ssl:
-    env.DATABASE_SSL === true || connectionString.searchParams.get("sslmode") === "require"
-      ? { rejectUnauthorized: false }
-      : undefined,
+  connectionString: url.toString(),
+  ssl: useTls ? { rejectUnauthorized: false } : undefined,
   max: 10,
   idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
+pool.on("error", (e) => console.error("[PG POOL]", e.code, e.message));
 export default pool;

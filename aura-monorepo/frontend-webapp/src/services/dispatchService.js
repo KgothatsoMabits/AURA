@@ -1,5 +1,7 @@
 import apiClient from "./apiClient.js";
 import { getFix, watchFix, LocationError } from "./location.js";
+
+const TERMINAL_STATUSES = ["resolved", "cancelled", "false_alarm"];
 let watcher = null,
   pollTimer = null,
   pingTimer = null,
@@ -9,6 +11,7 @@ let watcher = null,
   stopped = true,
   callbacks = {};
 async function start(payload, stealth) {
+  stopTracking();
   const fix = await getFix();
   const response = stealth
     ? await apiClient.createTask({
@@ -33,7 +36,10 @@ async function start(payload, stealth) {
     },
     (e) => callbacks.onError?.(new LocationError(e.message)),
   );
+  const pollIncidentId = incidentId;
+  const pollTaskId = taskId;
   const poll = async () => {
+    if (stopped || (stealth ? taskId !== pollTaskId : incidentId !== pollIncidentId)) return;
     try {
       const data = stealth
         ? await apiClient.getTask(taskId)
@@ -48,13 +54,12 @@ async function start(payload, stealth) {
             etaMinutes: data.eta,
           }
         : data.incident;
+      if (stopped || (stealth ? taskId !== pollTaskId : incidentId !== pollIncidentId)) return;
       callbacks.onStatus?.(incident);
-      if (
-        incident.status === "resolved" ||
-        incident.status === "cancelled" ||
-        incident.status === "false_alarm"
-      )
+      if (TERMINAL_STATUSES.includes(incident.status)) {
+        callbacks.onClosed?.(incident);
         stopTracking();
+      }
     } catch (e) {
       callbacks.onError?.(e);
     }
@@ -68,8 +73,10 @@ async function start(payload, stealth) {
       if (taskId) await apiClient.pingTaskLocation(taskId, f);
       else await apiClient.pingLocation(incidentId, f);
     } catch (e) {
-      latestFix = f;
-      callbacks.onError?.(e);
+      if (!stopped && (taskId || incidentId)) {
+        latestFix = f;
+        callbacks.onError?.(e);
+      }
     }
   }, 3000);
   await poll();
@@ -84,12 +91,16 @@ export function stopTracking() {
   if (pollTimer) clearInterval(pollTimer);
   if (pingTimer) clearInterval(pingTimer);
   pollTimer = pingTimer = null;
+  incidentId = taskId = null;
+  latestFix = null;
 }
 export async function cancel() {
-  if (taskId) {
-    await apiClient.finishTask(taskId);
-  } else if (incidentId) {
-    await apiClient.cancelIncident(incidentId);
+  const currentTaskId = taskId;
+  const currentIncidentId = incidentId;
+  if (currentTaskId) {
+    await apiClient.finishTask(currentTaskId);
+  } else if (currentIncidentId) {
+    await apiClient.cancelIncident(currentIncidentId);
   }
   stopTracking();
 }

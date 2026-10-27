@@ -121,7 +121,7 @@ export default function StealthDashboard() {
     const kind = /medical|wellness|health/i.test(helpNeeded) ? 4 : /routine|follow/i.test(helpNeeded) ? 3 : /urgent|critical|immediate/i.test(severityLevel) ? 2 : 1;
     const priority = /critical|immediate/i.test(severityLevel) ? 1 : /high/i.test(severityLevel) ? 2 : 3;
     try {
-      const task = await startTask({ title: `${helpNeeded}${additionalNotes ? ` - ${additionalNotes}` : ''}`.slice(0,120), kind, priority, tags: [premisesStatus, vulnerablePresent].filter(Boolean) });
+      const task = await startTask({ title: `${helpNeeded}${additionalNotes ? ` - ${additionalNotes}` : ''}`.slice(0,120), kind, priority, tags: [premisesStatus, vulnerablePresent].filter(Boolean), callbacks: { onStatus: setActiveEmergency, onClosed: () => { clearEmergency(); cancelSos(); setIsBlackoutScreen(false); } } });
       setActiveEmergency({ id: task.id, status: 'active', etaMinutes: task.eta ?? null, stealth: true });
       setModalStep(null);
       setIsBlackoutScreen(true);

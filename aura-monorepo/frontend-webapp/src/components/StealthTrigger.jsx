@@ -24,7 +24,7 @@ export default function StealthTrigger({ isOpen, onClose, defaultTitle = '' }) {
     const selectedOption = categories.find((c) => c.id === selectedCategory) || categories[1];
     const priority = reminderTime === 'Immediate' ? 1 : reminderTime === '15m' ? 2 : 3;
     try {
-      const task = await startTask({ title: taskTitle, kind: selectedOption.kind, priority, tags: [] });
+      const task = await startTask({ title: taskTitle, kind: selectedOption.kind, priority, tags: [], callbacks: { onStatus: setActiveEmergency, onClosed: () => setActiveEmergency(null) } });
       setActiveEmergency({ id: task.id, status: 'active', etaMinutes: task.eta ?? null, stealth: true });
       onClose();
     } catch (error) {

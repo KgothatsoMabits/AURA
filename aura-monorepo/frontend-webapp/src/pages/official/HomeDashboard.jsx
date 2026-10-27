@@ -122,7 +122,7 @@ export default function HomeDashboard() {
   const handleSosClick = async () => {
     if (isEmergencyActive) { setShowStandDownModal(true); return; }
     try {
-      await startIncident({ category: 'general assistance', threatLevel: 'critical', callbacks: { onStatus: setActiveEmergency } });
+      await startIncident({ category: 'general assistance', threatLevel: 'critical', callbacks: { onStatus: setActiveEmergency, onClosed: () => { clearEmergency(); cancelSos(); } } });
     } catch (error) {
       if (error?.name === 'LocationError') {
         window.alert('Your current location could not be obtained. No incident was created. Call 10111 if you need immediate help.');
@@ -145,7 +145,7 @@ export default function HomeDashboard() {
   const handleFinalizeDispatch = async (incident) => {
     try {
       const threatLevel = /priority 1|critical/i.test(incident.badge || '') ? 'critical' : /priority 2|high/i.test(incident.badge || '') ? 'high' : 'medium';
-      await startIncident({ category: incident.title, threatLevel, note: incident.neighborhood || '', callbacks: { onStatus: setActiveEmergency } });
+      await startIncident({ category: incident.title, threatLevel, note: incident.neighborhood || '', callbacks: { onStatus: setActiveEmergency, onClosed: () => { clearEmergency(); cancelSos(); } } });
     } catch (error) {
       if (error?.name === 'LocationError') window.alert('Your current location could not be obtained. No incident was created. Call 10111 if you need immediate help.');
       else window.alert(error?.message || 'Unable to create an incident. Please try again.');

@@ -90,7 +90,7 @@ export default function EmergencyGrid() {
     if (!selectedIncident) return;
     try {
       const threatLevel = /priority 1|critical/i.test(selectedIncident.badge || '') ? 'critical' : /priority 2|high/i.test(selectedIncident.badge || '') ? 'high' : 'medium';
-      await startIncident({ category: selectedIncident.title, threatLevel, callbacks: { onStatus: setActiveEmergency } });
+      await startIncident({ category: selectedIncident.title, threatLevel, callbacks: { onStatus: setActiveEmergency, onClosed: () => setActiveEmergency(null) } });
       setIsModalOpen(false);
       navigate('/');
     } catch (error) {
